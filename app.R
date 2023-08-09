@@ -8,6 +8,8 @@
 #
 
 library(shiny)
+library(ggplot2)
+library(tidyr)
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
@@ -22,7 +24,8 @@ ui <- fluidPage(
                         "Number of steps:",
                         min = 100,
                         max = 1000,
-                        value = 100)
+                        value = 100),
+           actionButton("plot", "Plot")
         ),
 
         # Show a plot of the generated distribution
@@ -38,11 +41,19 @@ server <- function(input, output) {
   Mn <- 52100
   repeat_unit <- 28.05
   tau <- repeat_unit / Mn
-  r <- reactive({seq(0, 10000, input$steps)})
-  wr <- reactive({tau^2 * r() * exp(-tau * r())})
+  # v <- reactiveValues(r = seq(0, 10000, 100),
+  #                     wr = tau^2 * r * exp(-tau * r))
+  
+  wrdist <- eventReactive(input$plot, {
+    r <- seq(0, 10000, input$steps)
+    wr <- tau^2 * r * exp(-tau * r)
+    # v$r <- seq(0, 10000, input$steps)
+    # v$wr <- tau^2 * r * exp(-tau * r)
+    as_tibble(list(r = r, wr = wr))
+  })
   
   output$distPlot <- renderPlot({
-    as_tibble(list(r = r(), wr = wr())) |>
+    wrdist() |>
       ggplot(aes(x = r, y = wr)) +
       geom_point() +
       theme_light()
