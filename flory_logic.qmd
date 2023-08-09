@@ -1,0 +1,42 @@
+---
+title: "Untitled"
+format: html
+---
+
+```{r}
+library(ggplot2)
+library(tidyr)
+```
+
+
+Flory-Schulz
+
+$w(r) = $\tau$^2r exp(-$\tau$r)$
+
+```{r}
+Mn <- 52100
+repeat_unit <- 28.05
+
+tau <- repeat_unit / Mn
+```
+
+$\tau$
+
+```{r}
+r <- seq(0, 10000, 100)
+
+wr <- tau^2 * r * exp(-tau * r)
+```
+
+```{r}
+flory <- as_tibble(list(r = r, wr = wr))
+```
+
+
+```{r}
+flory |>
+  ggplot(aes(x = r, y = wr)) +
+  geom_point() +
+  theme_light()
+```
+
