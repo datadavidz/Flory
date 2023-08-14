@@ -8,6 +8,7 @@ format: html
 library(ggplot2)
 library(tidyr)
 library(dplyr)
+library(purrr)
 ```
 
 
@@ -125,7 +126,7 @@ mr_tbl <- Xd_tbl |>
   left_join(as_tibble(list(r  = r, norm_wr = wr / sum(wr))), by = "r") |>
   mutate(mr = Xd * norm_wr) |>
   group_by(r) |>
-  mutate(mr_int = mr - lead(mr)) |>
+  mutate(mr_int = lead(mr) - mr) |>
   ungroup()
 
 # norm_wr <- wr / sum(wr)
@@ -138,14 +139,132 @@ mr_tbl <- Xd_tbl |>
 
 Elution over N
 ```{r}
-mr_tbl |>
+N_tbl <- mr_tbl |>
   group_by(Tex) |>
-  summarize(mr_tot = sum(mr_int)) |>
+  summarize(mr_tot = sum(mr_int), .groups = "drop") 
+
+N_tbl |>
   ggplot(aes(x = Tex, y = mr_tot)) +
   geom_point()
 ```
+
 Figure out the steps
 ```{r}
+N <- 10
+num_steps <- 10
+Cd <- N_tbl$mr_tot
+steps[[1]] <- list(rep(Cd[1], N))
+detector <- 0
 
+for(i in 2:num_steps-1){
+  next_step <- lag(unlist(steps[[i-1]]))
+  detector <- c(detector, next_step[length(next_step)])
+  next_step[is.na(next_step)] <- 0
+  steps[[i]] <- list(next_step + Cd[i])
+}
+
+# steps <- list()
+# steps[[1]] <- list(N_tbl$mr_tot)
+# steps[[1]] <- map(list(N_tbl$mr_tot), function(x) replace(x, is.na(x), 0))
+# for (i in 2:num_steps) {
+#   steps[[i]] <- map(list(lag(unlist(steps[[i-1]]))), function(x) replace(x, is.na(x), 0))
+# }
 ```
+
+#Redo with more discretization and steps
+```{r}
+Mn <- 19100 #52100
+repeat_unit <- 28.05
+
+tau <- repeat_unit / Mn
+
+r <- seq(125, 6000, 250)
+wr <- tau^2 * r * exp(-tau * r)
+
+#E191
+Ad <- 94.0
+Bd <- 1245
+
+Tcr <- Ad - Bd / r
+```
+
+Actual steps calculation
+```{r}
+Vc <- 2 # mL
+SFR <- 0.2 # mL/min
+
+Te_inc <- Vc / SFR * HR / N #degC
+```
+
+Recalculate Tex
+```{r}
+temp_init <- 88
+temp_final <- 98
+
+Tex <- seq(temp_init, temp_final, Te_inc)
+```
+
+Recalculate Xd
+```{r}
+Xd_tbl <- expand.grid(Tcr, Tex) |>
+  rename(Tcr = Var1, Tex = Var2) |>
+  rowwise() |>
+  mutate(Xd = ifelse(Tex > Tcr, 1 - exp(-kd*((Tex - Tcr)/HR)^nd), 0)) |>
+  ungroup() |>
+  left_join(as_tibble(list(r = r, Tcr = Tcr)), by = "Tcr") |>
+  select(r, everything())
+```
+
+```{r}
+Xd_tbl |>
+  ggplot(aes(x = Tex, y = Xd, color = factor(r))) +
+  geom_point() +
+  geom_line()
+```
+Calculate for each mr(r, Tc)
+```{r}
+mr_tbl <- Xd_tbl |>
+  left_join(as_tibble(list(r  = r, norm_wr = wr / sum(wr))), by = "r") |>
+  mutate(mr = Xd * norm_wr) |>
+  group_by(r) |>
+  mutate(mr_int = lead(mr) - mr) |>
+  ungroup()
+```
+
+```{r}
+N_tbl <- mr_tbl |>
+  group_by(Tex) |>
+  summarize(mr_tot = sum(mr_int), .groups = "drop") 
+```
+
+Figure out the steps
+```{r}
+#N <- 10
+num_steps <- length(Tex)
+Cd <- N_tbl$mr_tot
+steps <- list()
+steps[[1]] <- list(rep(Cd[1], N))
+detector <- 0
+
+for(i in 2:num_steps) {
+  next_step <- lag(unlist(steps[[i-1]]))
+  detector <- c(detector, next_step[length(next_step)])
+  next_step[is.na(next_step)] <- 0
+  steps[[i]] <- list(next_step + Cd[i])
+}
+
+# steps <- list()
+# steps[[1]] <- list(N_tbl$mr_tot)
+# steps[[1]] <- map(list(N_tbl$mr_tot), function(x) replace(x, is.na(x), 0))
+# for (i in 2:num_steps) {
+#   steps[[i]] <- map(list(lag(unlist(steps[[i-1]]))), function(x) replace(x, is.na(x), 0))
+# }
+```
+
+```{r}
+as_tibble(list(Tex = Tex, detector = detector)) |>
+  ggplot(aes(x = Tex, y = detector)) +
+  geom_point()
+```
+
 
