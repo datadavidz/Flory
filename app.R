@@ -20,6 +20,8 @@ ui <- fluidPage(
     # Sidebar with a slider input for number of bins 
     sidebarLayout(
         sidebarPanel(
+            numericInput("mn", "Mn :", 52100, min = 1e4, max = 1e6),
+            numericInput("maxr", "Maximum r:", 10000, min = 1e3, max = 1e5),
             sliderInput("steps",
                         "Number of steps:",
                         min = 100,
@@ -38,17 +40,14 @@ ui <- fluidPage(
 # Define server logic required to draw a histogram
 server <- function(input, output) {
 
-  Mn <- 52100
+  #Mn <- 52100
   repeat_unit <- 28.05
-  tau <- repeat_unit / Mn
-  # v <- reactiveValues(r = seq(0, 10000, 100),
-  #                     wr = tau^2 * r * exp(-tau * r))
-  
+  #tau <- repeat_unit / Mn
+
   wrdist <- eventReactive(input$plot, {
-    r <- seq(0, 10000, input$steps)
+    tau <- repeat_unit / input$mn
+    r <- seq(0, input$maxr, input$steps)
     wr <- tau^2 * r * exp(-tau * r)
-    # v$r <- seq(0, 10000, input$steps)
-    # v$wr <- tau^2 * r * exp(-tau * r)
     as_tibble(list(r = r, wr = wr))
   })
   

@@ -7,6 +7,7 @@ format: html
 ```{r}
 library(ggplot2)
 library(tidyr)
+library(dplyr)
 ```
 
 
@@ -15,7 +16,7 @@ Flory-Schulz
 $w(r) = $\tau$^2r exp(-$\tau$r)$
 
 ```{r}
-Mn <- 52100
+Mn <- 19100 #52100
 repeat_unit <- 28.05
 
 tau <- repeat_unit / Mn
@@ -24,7 +25,7 @@ tau <- repeat_unit / Mn
 $\tau$
 
 ```{r}
-r <- seq(0, 10000, 100)
+r <- seq(250, 4750, 500)
 
 wr <- tau^2 * r * exp(-tau * r)
 ```
@@ -39,5 +40,112 @@ flory |>
   ggplot(aes(x = r, y = wr)) +
   geom_point() +
   theme_light()
+```
+
+## Crystallization
+```{r}
+#E191
+Ac <- 90.4
+Bc <- 655
+
+Tdr <- Ac - Bc / r
+```
+
+Crystallinity for Tc < Tdr
+```{r}
+kc <- 2.47e-6
+nc <- 3.96
+CR <- 0.1
+Tc <- seq(81, 91, 1)
+
+Xc <- 1 - exp(-kc*((Tdr[1] - Tc[4])/CR)^nc)
+```
+
+Xc for all temps
+```{r}
+Xc_tbl <- expand.grid(Tdr, Tc) |>
+  rename(Tdr = Var1, Tc = Var2) |>
+  rowwise() |>
+  mutate(Xc = ifelse(Tc < Tdr, 1 - exp(-kc*((Tdr - Tc)/CR)^nc), 0)) |>
+  ungroup() |>
+  left_join(as_tibble(list(r = r, Tdr = Tdr)), by = "Tdr") |>
+  select(r, everything())
+```
+
+```{r}
+Xc_tbl |>
+  ggplot(aes(x = Tc, y = Xc, color = factor(r))) +
+  geom_point() +
+  geom_line()
+```
+```{r}
+as_tibble(list(r = r, Tdr = Tdr, Xc = Xc)) |>
+  mutate(Xc = ifelse(is.na(Xc), 0, Xc)) |>
+  ggplot(aes(x = r, y = Xc)) +
+  geom_point() +
+  theme_light()
+```
+## Dissolution
+
+```{r}
+Ad <- 94.0
+Bd <- 1245
+
+Tcr <- Ad - Bd / r
+
+nd <- 3.44
+kd <- 1.3e-3
+Tex <- seq(89, 98, 1)
+HR <- 0.2
+
+Xd <- 1 - exp(-kd * ((Tex-Tcr)/HR)^nd)
+```
+
+Xd for all temps
+```{r}
+Xd_tbl <- expand.grid(Tcr, Tex) |>
+  rename(Tcr = Var1, Tex = Var2) |>
+  rowwise() |>
+  mutate(Xd = ifelse(Tex > Tcr, 1 - exp(-kd*((Tex - Tcr)/HR)^nd), 0)) |>
+  ungroup() |>
+  left_join(as_tibble(list(r = r, Tcr = Tcr)), by = "Tcr") |>
+  select(r, everything())
+```
+
+```{r}
+Xd_tbl |>
+  ggplot(aes(x = Tex, y = Xd, color = factor(r))) +
+  geom_point() +
+  geom_line()
+```
+
+Calculate for each mr(r, Tc)
+```{r}
+mr_tbl <- Xd_tbl |>
+  left_join(as_tibble(list(r  = r, norm_wr = wr / sum(wr))), by = "r") |>
+  mutate(mr = Xd * norm_wr) |>
+  group_by(r) |>
+  mutate(mr_int = mr - lead(mr)) |>
+  ungroup()
+
+# norm_wr <- wr / sum(wr)
+# mr <- numeric()
+# 
+# for (i in 1:(length(Tex)-1)) {
+#   mr <- c(wr, wr[i]*Xd[i] - wr[i+1]*Xd[i])
+# }
+```
+
+Elution over N
+```{r}
+mr_tbl |>
+  group_by(Tex) |>
+  summarize(mr_tot = sum(mr_int)) |>
+  ggplot(aes(x = Tex, y = mr_tot)) +
+  geom_point()
+```
+Figure out the steps
+```{r}
+
 ```
 
