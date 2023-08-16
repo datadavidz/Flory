@@ -1,0 +1,171 @@
+---
+title: "Untitled"
+format: html
+---
+
+#Copolymer TREF simulation
+
+## LES
+```{r}
+# EH068
+Mn <- 37200
+Mco <- 84 #1-octene
+Mmo <- 28 #ethylene
+
+cpp <- 0.0068 #olefin propagation probability typically equal to average olefin mass fraction for random copolymers
+cp <- 1 - cpp
+LES <- seq(5, 1000, 10)
+
+#Number average chain length
+rN <- Mn / ((Mco * cpp) + (Mmo * cp))
+
+#Propagation probability
+pp <- (rN - 1) / rN
+
+#Probability of ethylene propagation
+pm <- pp * cp
+
+Pa <- (pp * (1-cp)) / (1-(cp*pp))
+```
+
+```{r}
+Fx <- function(x, LES, Pa, pm) {
+ Pa * x / (1 - Pa * x) ^ 2 * (LES * (1 - Pa * x / (1 - pm ^ LES)) + Pa * x / (1 - pm)) 
+}
+```
+
+```{r}
+WLES <- (1 - Pa) * (1 - pp) / Pa * (Fx(1-pm^LES, LES, Pa, pm) - Fx(1-pm^(LES-1), LES, Pa, pm))
+```
+
+```{r}
+as_tibble(list(les = LES, wles = WLES)) |>
+  ggplot(aes(x = les, y = wles)) + 
+  geom_point()
+```
+# Crystallization
+```{r}
+r <- LES
+wr <- WLES
+
+#EH068
+Ac <- 85.9
+Bc <- 597
+nc <- 4.49
+kc <- 2.3e-3
+
+Tdr <- Ac - Bc / r
+```
+
+```{r}
+CR = 0.2
+Tc <- seq(70, 91, 0.2)
+
+Xc_tbl <- expand.grid(Tdr, Tc) |>
+  rename(Tdr = Var1, Tc = Var2) |>
+  rowwise() |>
+  mutate(Xc = ifelse(Tc < Tdr, 1 - exp(-kc*((Tdr - Tc)/CR)^nc), 0)) |>
+  ungroup() |>
+  left_join(as_tibble(list(r = r, Tdr = Tdr)), by = "Tdr") |>
+  select(r, everything())
+```
+
+Calculate the real mr(r, Tc)
+```{r}
+mrc_tbl <- Xc_tbl |>
+  left_join(as_tibble(list(r  = r, norm_wr = wr / sum(wr))), by = "r") |>
+  mutate(mrc = Xc * norm_wr) |>
+  group_by(r) |>
+  mutate(mr_int = mrc - lead(mrc)) |>
+  ungroup()
+```
+
+```{r}
+Xc_tbl |>
+  filter(r > 405) |>
+  ggplot(aes(x = Tc, y = Xc, color = factor(r))) +
+  geom_point() +
+  geom_line()
+```
+
+
+## Dissolution
+```{r}
+# EH068
+Ad <- 88.8
+Bd <- 566
+
+Tcr <- Ad - Bd / r
+
+nd <- 4.49
+kd <- 7.35e-5
+Tex <- seq(89, 98, 1)
+HR <- 0.2
+N <- 20
+```
+
+Actual steps calculation
+```{r}
+Vc <- 2 # mL
+SFR <- 0.5 # mL/min
+
+Te_inc <- Vc / SFR * HR / N #degC
+```
+
+Recalculate Tex
+```{r}
+temp_init <- 80
+temp_final <- 100
+
+Tex <- seq(temp_init, temp_final, Te_inc)
+```
+
+Recalculate Xd
+```{r}
+Xd_tbl <- expand.grid(Tcr, Tex) |>
+  rename(Tcr = Var1, Tex = Var2) |>
+  rowwise() |>
+  mutate(Xd = ifelse(Tex > Tcr, 1 - exp(-kd*((Tex - Tcr)/HR)^nd), 0)) |>
+  ungroup() |>
+  left_join(as_tibble(list(r = r, Tcr = Tcr)), by = "Tcr") |>
+  select(r, everything())
+```
+
+Calculate for each mr(r, Tc)
+```{r}
+mr_tbl <- Xd_tbl |>
+  left_join(as_tibble(list(r  = r, norm_wr = wr / sum(wr))), by = "r") |>
+  mutate(mr = Xd * norm_wr) |>
+  group_by(r) |>
+  mutate(mr_int = lead(mr) - mr) |>
+  ungroup()
+```
+
+```{r}
+N_tbl <- mr_tbl |>
+  group_by(Tex) |>
+  summarize(mr_tot = sum(mr_int), .groups = "drop") 
+```
+
+Figure out the steps
+```{r}
+num_steps <- length(Tex)
+Cd <- N_tbl$mr_tot
+steps <- list()
+steps[[1]] <- list(rep(Cd[1], N))
+detector <- 0
+
+for(i in 2:num_steps) {
+  next_step <- lag(unlist(steps[[i-1]]))
+  detector <- c(detector, next_step[length(next_step)])
+  next_step[is.na(next_step)] <- 0
+  steps[[i]] <- list(next_step + Cd[i])
+}
+```
+
+```{r}
+as_tibble(list(Tex = Tex, detector = detector)) |>
+  ggplot(aes(x = Tex, y = detector)) +
+  geom_point() +
+  theme_light()
+```

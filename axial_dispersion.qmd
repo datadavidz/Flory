@@ -1,0 +1,46 @@
+---
+title: "Untitled"
+format: html
+---
+
+Axial dispersion
+```{r}
+#D effective axial dispersion coefficient
+#C is dimensionless concentration c/co - c is sample conc, c0 is the initial concentration in sample pulse
+#theta tu/L = time(t) * solvent speed(u) / column length (L)
+Dc <- 9.36e-5 #cm2 min-1
+
+column_length <- 15 #cm
+column_volume <- 10 #mL
+flow_rate <- 0.01 #ml/min
+solvent_speed <- column_length / (column_volume / flow_rate) #cm min-1
+time <- 1
+theta <- time * solvent_speed * column_length
+li <- 2
+```
+
+```{r}
+column_length <- 15
+solvent_speed <- 0.015
+theta <- 0.1
+li <- seq(1, 15, 0.1)
+Dc <- 9.36e-5 #cm2 min-1
+
+temp1 <- 1 / (sqrt(4 * pi * (Dc / (solvent_speed * column_length)) * theta))
+temp2 <- ((li/column_length)-theta)^2
+temp3 <- 4 * theta * Dc / (solvent_speed * column_length)
+temp4 <- exp(-temp2/temp3)
+temp5 <- temp1 * temp4
+
+
+# disp_1 <- 1 / (sqrt(4 * pi * (Dc / (solvent_speed * column_length)) * theta))
+# disp_2 <- exp(-((li/column_length)-theta)^2/(4 * theta * (Dc/ solvent_speed * column_length)))
+# disp <- disp_1 * disp_2
+```
+
+```{r}
+as_tibble(list(li = li, c = temp5)) |>
+  ggplot(aes(x = li, y = c)) +
+  geom_point()
+```
+

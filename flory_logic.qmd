@@ -173,33 +173,53 @@ for(i in 2:num_steps-1){
 
 #Redo with more discretization and steps
 ```{r}
-Mn <- 19100 #52100
+#E191
+# Ad <- 94.0
+# Bd <- 1245
+# nd <- 3.44
+# kd <- 1.3e-3
+# Mn <- 19100 #52100
+
+#E521
+Ad <- 94.1
+Bd <- 1200
+nd <- 5.41
+kd <- 4.78e-4
+Mn <- 52100
+
 repeat_unit <- 28.05
 
 tau <- repeat_unit / Mn
 
-r <- seq(125, 6000, 250)
+r <- seq(25, 10000, 50)
 wr <- tau^2 * r * exp(-tau * r)
 
-#E191
-Ad <- 94.0
-Bd <- 1245
+HR <- 0.5
+N <- 20
 
 Tcr <- Ad - Bd / r
 ```
 
+```{r}
+as_tibble(list(r = r, wr = wr)) |>
+  ggplot(aes(x = r, y = wr)) +
+  geom_point() +
+  theme_light()
+```
+
+
 Actual steps calculation
 ```{r}
 Vc <- 2 # mL
-SFR <- 0.2 # mL/min
+SFR <- 0.5 # mL/min
 
 Te_inc <- Vc / SFR * HR / N #degC
 ```
 
 Recalculate Tex
 ```{r}
-temp_init <- 88
-temp_final <- 98
+temp_init <- 70
+temp_final <- 110
 
 Tex <- seq(temp_init, temp_final, Te_inc)
 ```
@@ -216,10 +236,10 @@ Xd_tbl <- expand.grid(Tcr, Tex) |>
 ```
 
 ```{r}
-Xd_tbl |>
-  ggplot(aes(x = Tex, y = Xd, color = factor(r))) +
-  geom_point() +
-  geom_line()
+# Xd_tbl |>
+#   ggplot(aes(x = Tex, y = Xd, color = factor(r))) +
+#   geom_point() +
+#   geom_line()
 ```
 Calculate for each mr(r, Tc)
 ```{r}
@@ -264,7 +284,55 @@ for(i in 2:num_steps) {
 ```{r}
 as_tibble(list(Tex = Tex, detector = detector)) |>
   ggplot(aes(x = Tex, y = detector)) +
-  geom_point()
+  geom_point() +
+  theme_light()
+```
+## Crystallization shells
+
+```{r}
+#E191
+Ac <- 90.4
+Bc <- 655
+
+Tdr <- Ac - Bc / r
 ```
 
+Crystallinity parameters
+```{r}
+kc <- 2.47e-6
+nc <- 3.96
+CR <- 0.2
+Tc <- seq(70, 91, 0.2)
+```
+
+Xc for all temps
+```{r}
+Xc_tbl <- expand.grid(Tdr, Tc) |>
+  rename(Tdr = Var1, Tc = Var2) |>
+  rowwise() |>
+  mutate(Xc = ifelse(Tc < Tdr, 1 - exp(-kc*((Tdr - Tc)/CR)^nc), 0)) |>
+  ungroup() |>
+  left_join(as_tibble(list(r = r, Tdr = Tdr)), by = "Tdr") |>
+  select(r, everything())
+```
+
+Calculate the real mr(r, Tc)
+```{r}
+mrc_tbl <- Xc_tbl |>
+  left_join(as_tibble(list(r  = r, norm_wr = wr / sum(wr))), by = "r") |>
+  mutate(mrc = Xc * norm_wr) |>
+  group_by(r) |>
+  mutate(mr_int = mrc - lead(mrc)) |>
+  ungroup()
+```
+
+```{r}
+temp <- mrc_tbl |>
+  group_by(Tc) |>
+  summarize(mrc_tot = sum(mr_int), .groups = "drop") |>
+  filter(!is.na(mrc_tot)) |>
+  mutate(not_empty = (mrc_tot != 0)) |>
+  filter(not_empty == TRUE) |>
+  mutate(n = row_number())
+```
 
