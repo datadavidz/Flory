@@ -122,7 +122,8 @@ PD1 <- MW1 / MN1
 
 ```{r}
 get_alpha <- function(lambda, dx1, maxm) {
-  alpha <- numeric()
+  #alpha <- numeric()
+  alpha <- rep(0, maxm*2)
   w <- -1
   if (lambda < 0) {
     x1 <- -lambda
@@ -134,7 +135,8 @@ get_alpha <- function(lambda, dx1, maxm) {
       
       y1 <- 0.5 * log((1+v)/(1-v)) #inverse hyperbolic tangent
     }
-  alpha <- c(alpha, x1)
+  #alpha <- c(alpha, x1)
+  alpha[1] <- x1
   w <- w + 2
   }
   w <- w + 2
@@ -146,7 +148,8 @@ get_alpha <- function(lambda, dx1, maxm) {
       x1 <- x1 + dx
       y1 <- atan(lambda / x1) + (w - 1) * pi / 2
     }
-    alpha <- c(alpha, x1)
+    #alpha <- c(alpha, x1)
+    alpha[w] <- x1
     w <- w + 2
     x1 <- 0
     y1 <- 0
@@ -177,18 +180,21 @@ for (j in 1:channels1) {
     g <- 2 * R / D
   
     alpha <- get_alpha(lambda, dx, maxm)
-    index <- 1
+    #index <- 1
+    index <- -1
     
     if (lambda < 0) {
-      K0 <- 2 * lambda * lambda * exp(alpha[1] * alpha[1] * g * g) / (-alpha[1] * alpha[1] * lambda * (lambda + 1) - alpha[1] * alpha[1])
+      K0 <- 2 * lambda * lambda * exp(alpha[1] * alpha[1] * g * g) / (-alpha[1] * alpha[1] * (lambda * (lambda + 1) - alpha[1] * alpha[1]))
       pa <- pa + 2 * lambda * exp(alpha[1] * alpha[1] * g *g) / (lambda * (lambda + 1) - alpha[1] * alpha[1])
       pb <- pb + 2 * lambda * exp(alpha[1] * alpha[1] * g *g) / (lambda * (lambda + 1) - alpha[1] * alpha[1])
       pab <- pab - 2 * alpha[1] * alpha[1] * exp(alpha[1] * alpha[1] * g * g) / (lambda * (lambda + 1) - alpha[1] * alpha[1])
       K1 <- K0 + qa * pa
       K2 <- K0 + qa * pa + qa * qb * pab
       
-      index <- index + 1
+      index <- index + 2
     }
+    
+    index <- index + 2
     
     for (i in 1:maxm) {
       K0 <- K0 + 2 * lambda * lambda * exp(-alpha[index] * alpha[index] * g * g) / (alpha[index] * alpha[index] * (lambda * (lambda + 1) + alpha[index] * alpha[index]))
@@ -196,7 +202,7 @@ for (j in 1:channels1) {
       pb <- pb + 2 * lambda * exp(-alpha[index] * alpha[index] * g *g) / (lambda * (lambda + 1) + alpha[index] * alpha[index])
       pab <- pab + 2 * alpha[index] * alpha[index] * exp(-alpha[index] * alpha[index] * g * g) / (lambda * (lambda + 1) + alpha[1] * alpha[1])
       
-      index <- index + 1
+      index <- index + 2
     }
     K1 <- K0 + qa * pa
     K2 <- K0 + qa * pa + qb * pb + qa * qb * pab
@@ -220,7 +226,7 @@ for (j in 1:channels1) {
       while (broadening > 0) {
         chanind <- chanind + 1
         zplus <- (n + chanind) * chrominc
-        broadening <- M * gauss1[j] * exp(-0.5 * (zplus - t) * (zplus - t) / (sigma * sigma) / (sigma * sqrt(2 * pi)))
+        broadening <- M * gauss1[j] * (exp(-0.5 * (zplus - t) * (zplus - t) / (sigma * sigma)) / (sigma * sqrt(2 * pi)))
         HISTO[round(n + chanind)] <- HISTO[round(n + chanind)] + broadening
         HISTO[round(n - chanind)] <- HISTO[round(n - chanind)] + broadening
       }
