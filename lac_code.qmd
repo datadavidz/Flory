@@ -1,0 +1,245 @@
+---
+title: "Untitled"
+format: html
+---
+
+```{r}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+```
+
+
+Constants
+```{r}
+MNIT <- 30000
+PDIT <- 2.0
+MWIT <- PDIT * MNIT
+
+DM1 <- 120 #PPE monomer weight
+channels1 <- 250 #number of channels for the MW distribution
+
+N1 <- 1e6
+
+t <- 0
+chrommax <- 10 #minutes
+chrominc <- 0.01 #chromatogram consists of chrommax / chrominc channels
+
+EQS <- 0.0
+
+#Radius of gyration R = beta * alpha in nm
+a <- 0.5
+b <- 0.03388
+
+D <- 25 #pore size in nm
+
+lambda <- 3
+qa <- 0.0
+qb <- 0.0
+
+dx <- 0.01 #precision of the roots
+maxm <- 10 #how many roots are calculated
+
+V0 <- 1.25
+Vpore <- 0.4
+Vint <- V0 - Vpore
+f <- 0.3
+
+t0 <- V0/f
+tpore <- Vpore / f
+tint <- Vint / f
+
+PC <- 100 #platecount
+```
+
+
+```{r}
+gamma <- function(z) {
+  p <- list()
+  p[[1]] <- 1.000000000190
+  p[[2]] <- 76.18009172947146
+  p[[3]] <- 86.50532032941677
+  p[[4]] <- 24.01409824083091
+  p[[5]] <- 1.231739572450155
+  p[[6]] <- 0.001208650973866179
+  p[[7]] <- 0.000005395239384953
+  
+  sig <- 0
+  for (n in 2:7) {
+    sig = sig + p[[n]] / (z + n)
+  }
+  
+  return ((z * p[[1]] + sig) * sqrt(z+5.5) * exp(-(z+5.5)))
+}
+```
+
+
+Schulz-Flory
+```{r}
+k1 <- 1 / (PDIT - 1)
+beta1 <- k1 / (MWIT/PDIT)
+z <- k1 + 1
+g1 <- gamma(z)
+
+gauss1 <- numeric()
+
+for (i in 1:channels1) {
+   M <- i * DM1
+   gauss1 <- c(gauss1, beta1^(k1+1) * M^(k1-1) * exp(-beta1*M)/g1)
+}
+gauss1 <- round(N1 * MWIT / PDIT * gauss1 * DM1)
+```
+
+```{r}
+as_tibble(list(n = 1:channels1, gauss1 = gauss1)) |>
+  ggplot(aes(x = n, y = gauss1)) +
+  geom_point()
+```
+Calculate the moments for the distribution
+```{r}
+M0 <- 0
+M1 <- 0
+M2 <- 0
+M3 <- 0
+M4 <- 0
+M5 <- 0
+
+for (i in 1:channels1) {
+  M0 <- M0 + gauss1[i]
+  M1 <- M1 + i * gauss1[i]
+  M2 <- M2 + i * i * gauss1[i]
+  M3 <- M3 + i * i * i * gauss1[i]
+  #M4 <- M4 + i * i * i * i + gauss1[i] #too big of a number
+  #M5 <- M5 + i * i * i * i * i + gauss1[1]
+}
+
+SUMM1 <- M1
+
+MN1 <- DM1 * M1 / M0
+MW1 <- DM1 * M2 / M1
+PD1 <- MW1 / MN1
+```
+
+```{r}
+get_alpha <- function(lambda, dx1, maxm) {
+  alpha <- numeric()
+  w <- -1
+  if (lambda < 0) {
+    x1 <- -lambda
+    y1 <- -lambda
+    
+    while (y1 >= x1) {
+      x1 <- x1 + dx1
+      v <- -lambda / x1
+      
+      y1 <- 0.5 * log((1+v)/(1-v)) #inverse hyperbolic tangent
+    }
+  alpha <- c(alpha, x1)
+  w <- w + 2
+  }
+  w <- w + 2
+  x1 <- 0
+  y1 <- 0
+  
+  for (i in 1:maxm) {
+    while (y1 >= x1) {
+      x1 <- x1 + dx
+      y1 <- atan(lambda / x1) + (w - 1) * pi / 2
+    }
+    alpha <- c(alpha, x1)
+    w <- w + 2
+    x1 <- 0
+    y1 <- 0
+  }
+  return(alpha)
+}
+```
+
+
+Main
+```{r}
+results <- list()
+
+#initialize chromatogram
+HISTO <- rep(0, chrommax/chrominc)
+
+for (j in 1:channels1) {
+  K0 <- 0
+  K1 <- 0
+  K2 <- 0
+  pa <- 0
+  pb <- 0
+  pab <- 0
+  
+  if (gauss1[j] > 0 & (t < chrommax)) {
+    M <- j * DM1
+    R <- b * ((j + EQS) * DM1)^a
+    g <- 2 * R / D
+  
+    alpha <- get_alpha(lambda, dx, maxm)
+    index <- 1
+    
+    if (lambda < 0) {
+      K0 <- 2 * lambda * lambda * exp(alpha[1] * alpha[1] * g * g) / (-alpha[1] * alpha[1] * lambda * (lambda + 1) - alpha[1] * alpha[1])
+      pa <- pa + 2 * lambda * exp(alpha[1] * alpha[1] * g *g) / (lambda * (lambda + 1) - alpha[1] * alpha[1])
+      pb <- pb + 2 * lambda * exp(alpha[1] * alpha[1] * g *g) / (lambda * (lambda + 1) - alpha[1] * alpha[1])
+      pab <- pab - 2 * alpha[1] * alpha[1] * exp(alpha[1] * alpha[1] * g * g) / (lambda * (lambda + 1) - alpha[1] * alpha[1])
+      K1 <- K0 + qa * pa
+      K2 <- K0 + qa * pa + qa * qb * pab
+      
+      index <- index + 1
+    }
+    
+    for (i in 1:maxm) {
+      K0 <- K0 + 2 * lambda * lambda * exp(-alpha[index] * alpha[index] * g * g) / (alpha[index] * alpha[index] * (lambda * (lambda + 1) + alpha[index] * alpha[index]))
+      pa <- pa + 2 * lambda * exp(-alpha[index] * alpha[index] * g *g) / (lambda * (lambda + 1) + alpha[index] * alpha[index])
+      pb <- pb + 2 * lambda * exp(-alpha[index] * alpha[index] * g *g) / (lambda * (lambda + 1) + alpha[index] * alpha[index])
+      pab <- pab + 2 * alpha[index] * alpha[index] * exp(-alpha[index] * alpha[index] * g * g) / (lambda * (lambda + 1) + alpha[1] * alpha[1])
+      
+      index <- index + 1
+    }
+    K1 <- K0 + qa * pa
+    K2 <- K0 + qa * pa + qb * pb + qa * qb * pab
+    KAPPROX <- exp(-lambda * g * g + lambda * lambda * g * g / 3) #k calculated for molecular weight M
+    
+    if (qa == 0 & qb == 0) K <- K0
+    if (qa > 1 & qb == 0) K <- K1
+    if (qa > 0 & qb > 0) K <- K2
+    
+    t <- tint * K * tpore
+    
+    results[[j]] <- list(n = j, M = M, R = R, g = g, t = t, Ve = t*f, K0 = K0, KAPPROX = KAPPROX, K1 = K1, K2 = K2)
+    
+    n <- round(t / chrominc)
+    if ((PC > 0) & (t < chrommax)) {
+      sigma <- sqrt((0.01 * tpore) * (0.01 * tpore) + (tpore * K) * (tpore * K) / PC)
+      broadening <- M * gauss1[j] / (sigma * sqrt(2 * pi))
+      HISTO[n] <- HISTO[n] + broadening
+      chanind <- 0
+      
+      while (broadening > 0) {
+        chanind <- chanind + 1
+        zplus <- (n + chanind) * chrominc
+        broadening <- M * gauss1[j] * exp(-0.5 * (zplus - t) * (zplus - t) / (sigma * sigma) / (sigma * sqrt(2 * pi)))
+        HISTO[round(n + chanind)] <- HISTO[round(n + chanind)] + broadening
+        HISTO[round(n - chanind)] <- HISTO[round(n - chanind)] + broadening
+      }
+    }
+    if ((PC == 0) & (t < chrommax)) {
+      HISTO[round(n)] <- HISTO[round(n)] + M * gauss1[j]
+    }
+  }
+}
+```
+
+```{r}
+bind_rows(results)
+```
+
+```{r}
+#as_tibble(list(time = seq(chrominc, chrommax, chrominc), HISTO = HISTO)) |>
+as_tibble(list(time = 1:1000, HISTO = HISTO)) |>  
+  ggplot(aes(x = time, y = HISTO)) +
+    geom_line()
+```
+
