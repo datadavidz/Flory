@@ -22,7 +22,7 @@ channels1 <- 250 #number of channels for the MW distribution
 N1 <- 1e6
 
 t <- 0
-chrommax <- 10 #minutes
+chrommax <- 60 #minutes
 chrominc <- 0.01 #chromatogram consists of chrommax / chrominc channels
 
 EQS <- 0.0
@@ -33,11 +33,11 @@ b <- 0.03388
 
 D <- 25 #pore size in nm
 
-lambda <- 3
-qa <- 0.0
-qb <- 0.0
+lambda <- -11
+qa <- 0.05
+qb <- 0.05
 
-dx <- 0.01 #precision of the roots
+dx1 <- 0.01 #precision of the roots
 maxm <- 10 #how many roots are calculated
 
 V0 <- 1.25
@@ -45,11 +45,11 @@ Vpore <- 0.4
 Vint <- V0 - Vpore
 f <- 0.3
 
-t0 <- V0/f
+t0 <- V0 / f
 tpore <- Vpore / f
 tint <- Vint / f
 
-PC <- 100 #platecount
+PC <- 10000 #platecount
 ```
 
 
@@ -69,7 +69,7 @@ gamma <- function(z) {
     sig = sig + p[[n]] / (z + n)
   }
   
-  return ((z * p[[1]] + sig) * sqrt(z+5.5) * exp(-(z+5.5)))
+  return (2.506628275 / z * (p[[1]] + sig) * (z+5.5)^(z+0.5) * exp(-(z+5.5)))
 }
 ```
 
@@ -135,9 +135,8 @@ get_alpha <- function(lambda, dx1, maxm) {
       
       y1 <- 0.5 * log((1+v)/(1-v)) #inverse hyperbolic tangent
     }
-  #alpha <- c(alpha, x1)
-  alpha[1] <- x1
-  w <- w + 2
+    alpha[1] <- x1
+    w <- w + 2
   }
   w <- w + 2
   x1 <- 0
@@ -145,10 +144,9 @@ get_alpha <- function(lambda, dx1, maxm) {
   
   for (i in 1:maxm) {
     while (y1 >= x1) {
-      x1 <- x1 + dx
+      x1 <- x1 + dx1
       y1 <- atan(lambda / x1) + (w - 1) * pi / 2
     }
-    #alpha <- c(alpha, x1)
     alpha[w] <- x1
     w <- w + 2
     x1 <- 0
@@ -157,6 +155,39 @@ get_alpha <- function(lambda, dx1, maxm) {
   return(alpha)
 }
 ```
+
+```{r}
+# broaden_peak <- function(t, chrominc, PC, tpore, K, gauss1, j) {
+#   M <- j * DM1
+#   HISTO <- rep(0, chrommax/chrominc)
+#   n <- round(t / chrominc)
+#   
+#   if ((PC > 0) & (t < chrommax)) {
+#     sigma <- sqrt((0.01 * tpore) * (0.01 * tpore) + (tpore * K) * (tpore * K) / PC)
+#     print(sigma)
+#     broadening <- M * gauss1[j] / (sigma * sqrt(2 * pi))
+#     print(broadening)
+#     HISTO[n] <- HISTO[n] + broadening
+#     chanind <- 0
+#     print(paste0("First:", broadening)) 
+#     
+#     while (broadening > 1) {
+#       chanind <- chanind + 1
+#       zplus <- (n + chanind) * chrominc
+#       broadening <- M * gauss1[j] * (exp(-0.5 * (zplus - t) * (zplus - t) / (sigma * sigma)) / (sigma * sqrt(2 * pi)))
+# 
+#       #if ((n+chanind < 1000) & (n-chanind > 0)) {
+#       HISTO[round(n + chanind)] <- HISTO[round(n + chanind)] + broadening
+#       HISTO[round(n - chanind)] <- HISTO[round(n - chanind)] + broadening
+#       #}
+#     print(paste("In loop", chanind, broadening))
+#     #broadening <- 0
+#     }
+#   }
+#   return(HISTO)
+# }
+```
+
 
 
 Main
@@ -174,12 +205,12 @@ for (j in 1:channels1) {
   pb <- 0
   pab <- 0
   
-  if (gauss1[j] > 0 & (t < chrommax)) {
+  if ((gauss1[j] > 0) & (t < chrommax)) {
     M <- j * DM1
     R <- b * ((j + EQS) * DM1)^a
     g <- 2 * R / D
   
-    alpha <- get_alpha(lambda, dx, maxm)
+    alpha <- get_alpha(lambda, dx1, maxm)
     #index <- 1
     index <- -1
     
@@ -212,7 +243,7 @@ for (j in 1:channels1) {
     if (qa > 1 & qb == 0) K <- K1
     if (qa > 0 & qb > 0) K <- K2
     
-    t <- tint * K * tpore
+    t <- tint + K * tpore
     
     results[[j]] <- list(n = j, M = M, R = R, g = g, t = t, Ve = t*f, K0 = K0, KAPPROX = KAPPROX, K1 = K1, K2 = K2)
     
@@ -227,8 +258,10 @@ for (j in 1:channels1) {
         chanind <- chanind + 1
         zplus <- (n + chanind) * chrominc
         broadening <- M * gauss1[j] * (exp(-0.5 * (zplus - t) * (zplus - t) / (sigma * sigma)) / (sigma * sqrt(2 * pi)))
-        HISTO[round(n + chanind)] <- HISTO[round(n + chanind)] + broadening
-        HISTO[round(n - chanind)] <- HISTO[round(n - chanind)] + broadening
+        #if (((n+chanind) < (chrommax/chrominc)) & ((n-chanind) > 0)) {
+          HISTO[round(n + chanind)] <- HISTO[round(n + chanind)] + broadening
+          HISTO[round(n - chanind)] <- HISTO[round(n - chanind)] + broadening
+        #}
       }
     }
     if ((PC == 0) & (t < chrommax)) {
@@ -239,13 +272,31 @@ for (j in 1:channels1) {
 ```
 
 ```{r}
-bind_rows(results)
+bind_rows(results) |> summary()
 ```
 
 ```{r}
-#as_tibble(list(time = seq(chrominc, chrommax, chrominc), HISTO = HISTO)) |>
-as_tibble(list(time = 1:1000, HISTO = HISTO)) |>  
+as_tibble(list(time = seq(chrominc, chrommax, chrominc), HISTO = HISTO[1:(chrommax/chrominc)])) |>
+#as_tibble(list(time = 1:1000, HISTO = HISTO)) |>  
   ggplot(aes(x = time, y = HISTO)) +
     geom_line()
+```
+```{r}
+# get_K0 <- function(alpha, lambda, index = 1, imaginary = TRUE) {
+#   KO <- 0
+#   if (imaginary == TRUE) {
+#     K0 <- 2 * lambda * lambda * exp(alpha[1] * alpha[1] * g * g) / (-alpha[1] * alpha[1] * (lambda * (lambda + 1) - alpha[1] * alpha[1]))
+#   } else {
+#     K0 <- K0 + 2 * lambda * lambda * exp(-alpha[index] * alpha[index] * g * g) / (alpha[index] * alpha[index] * (lambda * (lambda + 1) + alpha[index] * alpha[index]))
+#   }
+#   return(K0)
+# }
+```
+
+```{r}
+# x <- seq(0.1, 10, 0.1)
+# y <- x * tan(x) + 11
+# 
+# plot(x, y)
 ```
 
