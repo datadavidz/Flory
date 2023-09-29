@@ -20,18 +20,17 @@ ui <- fluidPage(
     # Sidebar with a slider input for number of bins 
     sidebarLayout(
         sidebarPanel(
-            numericInput("mn", "Mn :", 52100, min = 1e4, max = 1e6),
-            numericInput("maxr", "Maximum r:", 10000, min = 1e3, max = 1e5),
-            sliderInput("steps",
+          numericInput("repunit", "Repeat Unit:", 28, min = 10, max = 2000),
+          numericInput("mn", "Mn :", 30000, min = 1e4, max = 1e6),
+          numericInput("maxr", "Maximum r:", 10000, min = 1e3, max = 1e5),
+          sliderInput("steps",
                         "Number of steps:",
                         min = 100,
                         max = 1000,
                         value = 100),
-            radioButtons("dist", "Distribution type:",
+          radioButtons("dist", "Distribution type:",
                          c("Weight density" = "wr",
                            "Number density" = "nc")),
-            #                "Log-normal" = "lnorm",
-            #                "Exponential" = "exp")),
            actionButton("plot", "Plot")
         ),
 
@@ -46,15 +45,15 @@ ui <- fluidPage(
 server <- function(input, output) {
 
   #Mn <- 52100
-  repeat_unit <- 28.05
+  #repeat_unit <- 28.05
   #tau <- repeat_unit / Mn
 
   rdist <- eventReactive(input$plot, {
-    tau <- repeat_unit / input$mn
+    tau <- input$repunit / input$mn
     r <- seq(1, input$maxr, input$steps)
     wr <- tau^2 * r * exp(-tau * r)  
     if (input$dist == "nc") {
-      wr <- wr / (seq(1, input$maxr, input$steps) * repeat_unit)
+      wr <- wr / (seq(1, input$maxr, input$steps) * input$repunit)
     }
     wr <- wr / sum(wr)
     as_tibble(list(r = r, wr = wr))
