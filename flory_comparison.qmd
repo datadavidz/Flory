@@ -1,0 +1,193 @@
+---
+title: "Untitled"
+format: html
+---
+
+Different approaches to Flory-Schulz
+```{r}
+library(ggplot2)
+library(tidyr)
+```
+
+Soares approach
+
+$w(r) = $\tau$^2r exp(-$\tau$r)$
+
+```{r}
+Mn <- 12500 #MNIT 19100 52100
+repeat_unit <- 254 #DM1 28.05 PPO:120
+r_step <- 1
+mh_a <- 0.83 #mark-houwink constant for polycarbonate
+tau <- repeat_unit / Mn
+```
+
+```{r}
+r <- seq(1, 2500, r_step)
+
+wr <- tau^2 * r * exp(-tau * r)
+```
+
+
+```{r}
+as_tibble(list(r = r, wr = wr)) |>
+  ggplot(aes(x = r, y = wr)) +
+  geom_point() +
+  theme_light()
+```
+
+```{r}
+number_chains <- wr / (seq(1, 2500, r_step) * 120)
+```
+
+```{r}
+as_tibble(list(r = r, wr = number_chains)) |>
+  ggplot(aes(x = r, y = wr)) +
+  geom_point() +
+  theme_light()
+```
+```{r}
+nc_norm <- number_chains / sum(number_chains)
+```
+
+```{r}
+as_tibble(list(r = r, wr = nc_norm)) |>
+  ggplot(aes(x = r, y = wr)) +
+  geom_point() +
+  theme_light()
+```
+```{r}
+N1 <- 1
+
+n1_norm <- nc_norm * N1
+```
+
+```{r}
+# as_tibble(list(r = r, wr = n1_norm)) |>
+#   ggplot(aes(x = r, y = wr)) +
+#   geom_point() +
+#   theme_light()
+```
+```{r}
+M0 <- 0
+M1 <- 0
+M2 <- 0
+M3 <- 0
+M4 <- 0
+M5 <- 0
+M10 <- 0 #added for Mv
+
+for (i in 1:length(n1_norm)) {
+  M0 <- M0 + n1_norm[i]
+  #M1 <- M1 + i * 10 * n1_norm[i]
+  M1 <- M1 + (i * r_step * repeat_unit) * n1_norm[i]
+  #M2 <- M2 + i * i * 10^2 * n1_norm[i]
+  M2 <- M2 + (i * r_step * repeat_unit)^2 * n1_norm[i]
+  #M3 <- M3 + i * i * i * 10^3 * n1_norm[i]
+  M3 <- M3 + (i * r_step * repeat_unit)^3 * n1_norm[i]
+  #M4 <- M4 + i * i * i * i + gauss1[i] #too big of a number
+  #M5 <- M5 + i * i * i * i * i + gauss1[1]
+  M10 <- M10 + (i * r_step * repeat_unit)^(1 + mh_a) * n1_norm[i]
+}
+
+SUMM1 <- M1
+
+#MN1 <- repeat_unit * M1 / M0
+MN1 <- M1 / M0
+MW1 <- M2 / M1
+PD1 <- MW1 / MN1
+
+MV <- (M10 / M1)^(1 / mh_a)
+```
+
+Stephan's Gamma approach
+```{r}
+MNIT <- 30000
+PDIT <- 2.0
+MWIT <- PDIT * MNIT
+
+DM1 <- 120 #PPE monomer weight
+channels1 <- 250 #number of channels for the MW distribution
+
+N1 <- 1e6
+```
+
+```{r}
+gamma <- function(z) {
+  p <- list()
+  p[[1]] <- 1.000000000190
+  p[[2]] <- 76.18009172947146
+  p[[3]] <- 86.50532032941677
+  p[[4]] <- 24.01409824083091
+  p[[5]] <- 1.231739572450155
+  p[[6]] <- 0.001208650973866179
+  p[[7]] <- 0.000005395239384953
+  
+  sig <- 0
+  for (n in 2:7) {
+    sig = sig + p[[n]] / (z + n)
+  }
+  
+  return (2.506628275 / z * (p[[1]] + sig) * (z+5.5)^(z+0.5) * exp(-(z+5.5)))
+}
+```
+
+Schulz-Flory
+```{r}
+k1 <- 1 / (PDIT - 1)
+beta1 <- k1 / (MWIT/PDIT)
+z <- k1 + 1
+g1 <- gamma(z)
+
+gauss1 <- numeric()
+
+for (i in 1:channels1) {
+   M <- i * 10 * DM1
+   gauss1 <- c(gauss1, beta1^(k1+1) * M^(k1-1) * exp(-beta1*M)/g1)
+}
+#gauss1 <- round(N1 * MWIT / PDIT * gauss1 * DM1)
+```
+
+```{r}
+as_tibble(list(n = 1:channels1, gauss1 = gauss1)) |>
+  ggplot(aes(x = n, y = gauss1)) +
+  geom_point()
+```
+```{r}
+g1_norm <- gauss1 / sum(gauss1)
+
+as_tibble(list(n = 1:channels1, gauss1 = g1_norm)) |>
+  ggplot(aes(x = n, y = gauss1)) +
+  geom_point()
+```
+```{r}
+g1n1_norm <- round(g1_norm * N1)
+
+as_tibble(list(n = 1:channels1, gauss1 = g1n1_norm)) |>
+  ggplot(aes(x = n, y = gauss1)) +
+  geom_point()
+```
+```{r}
+M0 <- 0
+M1 <- 0
+M2 <- 0
+M3 <- 0
+M4 <- 0
+M5 <- 0
+
+for (i in 1:length(n1_norm)) {
+  M0 <- M0 + g1n1_norm[i]
+  M1 <- M1 + i * 10 * g1n1_norm[i]
+  M2 <- M2 + i * i * 10^2 * g1n1_norm[i]
+  M3 <- M3 + i * i * i * 10^3 * g1n1_norm[i]
+  #M4 <- M4 + i * i * i * i + gauss1[i] #too big of a number
+  #M5 <- M5 + i * i * i * i * i + gauss1[1]
+}
+
+SUMM1 <- M1
+
+MN1 <- DM1 * M1 / M0
+MW1 <- DM1 * M2 / M1
+PD1 <- MW1 / MN1
+```
+
+
