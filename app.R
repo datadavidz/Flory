@@ -27,6 +27,11 @@ ui <- fluidPage(
                         min = 100,
                         max = 1000,
                         value = 100),
+            radioButtons("dist", "Distribution type:",
+                         c("Weight density" = "wr",
+                           "Number density" = "nc")),
+            #                "Log-normal" = "lnorm",
+            #                "Exponential" = "exp")),
            actionButton("plot", "Plot")
         ),
 
@@ -44,15 +49,19 @@ server <- function(input, output) {
   repeat_unit <- 28.05
   #tau <- repeat_unit / Mn
 
-  wrdist <- eventReactive(input$plot, {
+  rdist <- eventReactive(input$plot, {
     tau <- repeat_unit / input$mn
-    r <- seq(0, input$maxr, input$steps)
-    wr <- tau^2 * r * exp(-tau * r)
+    r <- seq(1, input$maxr, input$steps)
+    wr <- tau^2 * r * exp(-tau * r)  
+    if (input$dist == "nc") {
+      wr <- wr / (seq(1, input$maxr, input$steps) * repeat_unit)
+    }
+    wr <- wr / sum(wr)
     as_tibble(list(r = r, wr = wr))
   })
   
   output$distPlot <- renderPlot({
-    wrdist() |>
+    rdist() |>
       ggplot(aes(x = r, y = wr)) +
       geom_point() +
       theme_light()
