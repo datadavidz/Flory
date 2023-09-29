@@ -14,10 +14,10 @@ Soares approach
 $w(r) = $\tau$^2r exp(-$\tau$r)$
 
 ```{r}
-Mn <- 12500 #MNIT 19100 52100
-repeat_unit <- 254 #DM1 28.05 PPO:120
-r_step <- 1
-mh_a <- 0.83 #mark-houwink constant for polycarbonate
+Mn <- 30000 #MNIT 19100 52100
+repeat_unit <- 120 #DM1 28.05 PPO:120 PC:254
+r_step <- 10
+mh_a <- 0.83 #used for mv - mark-houwink constant for polycarbonate: 0.83
 tau <- repeat_unit / Mn
 ```
 
@@ -56,7 +56,7 @@ as_tibble(list(r = r, wr = nc_norm)) |>
   theme_light()
 ```
 ```{r}
-N1 <- 1
+N1 <- 1e6
 
 n1_norm <- nc_norm * N1
 ```
@@ -86,7 +86,9 @@ for (i in 1:length(n1_norm)) {
   M3 <- M3 + (i * r_step * repeat_unit)^3 * n1_norm[i]
   #M4 <- M4 + i * i * i * i + gauss1[i] #too big of a number
   #M5 <- M5 + i * i * i * i * i + gauss1[1]
-  M10 <- M10 + (i * r_step * repeat_unit)^(1 + mh_a) * n1_norm[i]
+  
+  # FOR MV ONLY
+  #M10 <- M10 + (i * r_step * repeat_unit)^(1 + mh_a) * n1_norm[i]
 }
 
 SUMM1 <- M1
@@ -96,7 +98,7 @@ MN1 <- M1 / M0
 MW1 <- M2 / M1
 PD1 <- MW1 / MN1
 
-MV <- (M10 / M1)^(1 / mh_a)
+#MV <- (M10 / M1)^(1 / mh_a)
 ```
 
 Stephan's Gamma approach
@@ -174,7 +176,7 @@ M3 <- 0
 M4 <- 0
 M5 <- 0
 
-for (i in 1:length(n1_norm)) {
+for (i in 1:length(g1n1_norm)) {
   M0 <- M0 + g1n1_norm[i]
   M1 <- M1 + i * 10 * g1n1_norm[i]
   M2 <- M2 + i * i * 10^2 * g1n1_norm[i]
